@@ -1,0 +1,135 @@
+
+    public class CameraController : MonoBehaviour
+    {
+
+        public float Sensitivity = 10f; //Es la sensibilidad del puntero
+        public float minPitch = -30f; // Establecen los límites de inclinación (pitch) de la cámara.
+        public float maxPitch = 60f; // Establecen los límites de inclinación (pitch) de la cámara.
+        public Transform parent; //uso de los objetos de unity
+        public Transform boneParent; //uso de los objetos de unity
+        SerialPort stream = new SerialPort("COM10", 9600);
+
+        private float pitch = 0f;
+        [HideInInspector] public float yaw = 0f;
+        [HideInInspector] public float relativeYaw = 0f;
+        public int button1;
+        public int button2;
+        public int button3;
+        public int button4;
+
+
+        void Start()
+        {
+            try
+            {
+                stream.Open();
+                UnityEngine.Debug.Log("Puerto serie abierto correctamente.");
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError("Error al abrir el puerto serie: " + ex.Message);
+            }
+        }
+
+        void OnEnable() //Bloquea el cursor del mouse
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+
+        void LateUpdate() // se llama después de que todos los objetos hayan sido procesados en el fotograma
+        {
+            CameraRotate();
+            transform.position = boneParent.position;
+        }
+
+        public void CameraRotate()
+        {
+
+            try
+            {
+                // Leer datos del giroscopio y botones
+                string data = stream.ReadLine();
+              //  UnityEngine.Debug.Log("Datos recibidos: " + data); // Registrar los datos recibidos
+
+                string[] values = data.Split(',');
+
+                if (values.Length < 5)
+                {
+                    UnityEngine.Debug.Log("Datos incompletos recibidos: " + data);
+                    return;
+                }
+
+                // Intentar convertir los valores a flotantes
+                if (!float.TryParse(values[0], out float accel_ang_y) ||
+                    !float.TryParse(values[1], out float accel_ang_x) ||
+                    !float.TryParse(values[2], out float accel_ang_z) ||
+                    !int.TryParse(values[3], out button1) ||
+                    !int.TryParse(values[4], out button2) ||
+                    !int.TryParse(values[5], out button3) ||
+                    !int.TryParse(values[6], out button4))
+                {
+                    UnityEngine.Debug.LogWarning("Formato de datos incorrecto: " + data);
+                    return;
+                }
+
+                // Aplicar filtro de Kalman si es necesario
+               
+
+                // Limitar velocidad de rotación si es necesario
+                float maxRotationSpeed = 5f;
+                accel_ang_y = Mathf.Clamp(accel_ang_y * Sensitivity, -maxRotationSpeed, maxRotationSpeed);
+
+
+                accel_ang_z = Mathf.Clamp(accel_ang_z * Sensitivity, -maxRotationSpeed, maxRotationSpeed);
+
+                // Aplicar rotación
+                relativeYaw += accel_ang_z;
+                pitch -= accel_ang_y;
+                pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+
+                // Aplicar rotación suavizada si es necesario
+                float smoothness = 0.5f; // Ajustar este valor según la suavidad deseada
+                yaw = Mathf.Lerp(yaw, relativeYaw, smoothness);
+                transform.eulerAngles = new Vector3(pitch, yaw, 0f);
+
+                // Manejar los botones
+                HandleButtons(button1, button2);
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError("Error al procesar los datos del giroscopio: " + ex.Message);
+            }
+        }
+
+        public void HandleButtons(int button1, int button2)
+        {
+            if (button1 == 1)
+            {
+                Fire();
+            }
+
+            if (button2 == 1)
+            {
+                Reload();
+            }
+        }
+
+        void Fire()
+        {
+            // Lógica para disparar
+            UnityEngine.Debug.Log("¡Disparo!");
+        }
+
+        void Reload()
+        {
+            // Lógica para recargar
+            UnityEngine.Debug.Log("Recargando...");
+        }
+
+        void OnDestroy()
+        {
+            if (stream.IsOpen)
+                stream.Close(); // Cierra el puerto serial cuando el objeto se destruye
+        }
+    }
